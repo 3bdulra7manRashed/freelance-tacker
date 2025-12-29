@@ -26,7 +26,7 @@ scraper = cloudscraper.create_scraper(
 )
 
 # --- 2. الفلاتر ---
-EXCLUDED_KEYWORDS = ["wordpress", "ووردبريس", "وردبريس", "ورد بريس", "elementor", "divi", "woocommerce", "وكومرس", "shopify", "شوبيفاي", "سلة", "زد", "salla", "zid"]
+EXCLUDED_KEYWORDS = ["wordpress", "ووردبريس", "وردبريس", "ورد بريس", "elementor", "divi", "woocommerce", "وكومرس", "shopify", "شوبيفاي", "سلة", "زد", "salla", "zid","بلوجر"]
 WEB_KEYWORDS = ["web", "ويب", "موقع", "site", "front", "back", "full stack", "full-stack", "php", "laravel", "python", "django", "node", "react", "vue", "api", "sql", "server", "سيرفر", "استضافة", "رفع", "deploy", "javascript", "js", "html", "css","لوحة تحكم","dashboard","next.js","next","nextjs"]
 CREATIVE_KEYWORDS = ["تصميم", "design", "جرافيك", "graphic", "شعار", "logo", "مونتاج", "montage", "edit", "video", "فيديو", "موشن", "فوتوشوب", "photoshop", "premiere", "بريمير", "ريلز", "reels"]
 QURAN_KEYWORDS = ["قرآن","قران","قرءان", "quran", "تلاوة", "recitation", "مصحف", "تجويد", "آية","اية","ايه", "آيات", "سورة", "ديني", "دعوي", "إسلامي", "islamic"]
