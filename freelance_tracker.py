@@ -107,25 +107,31 @@ def generate_smart_response(title, description):
     ]
 
     prompt = f"""
-    Act as an expert Senior Full Stack Developer and Freelancer.
-    
-    Project Details:
-    - Title: {title}
-    - Description: {description}
+You are an expert **Senior Full Stack Developer & Professional Freelancer**.
 
-    Instructions:
-    1. Read the project description carefully to understand the client's specific needs (do not rely on the title only).
-    2. Write a professional, detailed, and convincing proposal in Arabic. 
-       - Do not make it short or generic. 
-       - Explain how you will solve their specific problem based on the description.
-       - Show enthusiasm and expertise.
-    3. At the very end, provide a realistic estimation for the Cost (in USD) and Duration (in Days) based on the scope of work described.
+Project Information:
+- Title: {title}
+- Description: {description}
 
-    Required Output Format:
-    [The Proposal Text in Arabic]
-    ــــــــــــــــــــــــــ
-    💡 *التقدير:* [Price] | [Duration]
-    """
+Your Task:
+1. Read and analyze the project description carefully. Focus on the actual needs, not just the title.
+2. Write a **professional, convincing proposal in Arabic only**.
+3. The proposal must:
+   - Show confidence, experience, and understanding of the client's needs.
+   - Explain briefly how you will execute the project step-by-step.
+   - Suggest suitable technologies (Laravel / Next.js / APIs / MySQL ... depending on context).
+   - Must NOT contain price or duration inside the main proposal text.
+4. After the proposal, provide a **realistic estimation (in USD and Days)** in a separate line.
+
+Output Format (VERY IMPORTANT):
+Write the proposal text only in **Arabic**.
+
+Then add at the end exactly in this format:
+
+ــــــــــــــــــــــــــــــــــــــــــــــ
+💡 *التقدير:* [Price in USD] | [Duration in Days]
+"""
+
     
     for model_name in models_to_try:
         try:
@@ -143,43 +149,53 @@ def generate_smart_response(title, description):
     return "تعذر توليد الرد من جميع الموديلات المتاحة."
 
 def send_telegram_message(title, link, source, category):
-    if not BOT_TOKEN or not CHAT_ID: 
-        print("🛑 Error: Missing Telegram Tokens")
-        return
+    if not BOT_TOKEN or not CHAT_ID: return
 
-    description = get_full_project_details(link, source)
-    if not description: description = title 
-
-    ai_text = generate_smart_response(title, description)
-
-    # 1. إزالة التنسيق مؤقتاً لضمان وصول الرسالة (سناقوم بإرجاعه لاحقاً بطريقة آمنة)
-    # لاحظ أنني حذفت "parse_mode": "Markdown" من الأسفل
-    msg = f"""🔔 مشروع {category} جديد ({source})
+    # -------------------------------------------------------
+    # 1️⃣ الرسالة الأولى: تفاصيل المشروع (تصل فوراً)
+    # -------------------------------------------------------
+    print(f"   🚀 Sending Project Notification: {title}")
+    
+    msg1 = f"""🔔 مشروع {category} جديد ({source})
 
 📝 {title}
 
-🔗 {link}
+🔗 {link}"""
 
-ــــــــــــــــــــــــــــــــــــــــــــــــــــ
-{ai_text}
-"""
-    
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    # قمنا بإزالة parse_mode مؤقتاً
-    payload = {"chat_id": CHAT_ID, "text": msg} 
     
+    # نرسل الرسالة الأولى (بدون Markdown لتجنب الأخطاء في العناوين الغريبة)
     try:
-        response = requests.post(url, data=payload)
-        
-        # 2. التحقق الدقيق من رد تليجرام
-        if response.status_code == 200:
-            print(f"   ✅ Notification Sent Successfully: {title}")
+        r1 = requests.post(url, data={"chat_id": CHAT_ID, "text": msg1})
+        if r1.status_code != 200:
+            print(f"   ⚠️ Project Msg Failed: {r1.text}")
+    except Exception as e:
+        print(f"   ❌ Network Error (Msg1): {e}")
+
+    # -------------------------------------------------------
+    # 2️⃣ الرسالة الثانية: العرض الذكي (تصل بعد ثوانٍ)
+    # -------------------------------------------------------
+    
+    # نجلب الوصف الآن عشان الذكاء الاصطناعي
+    description = get_full_project_details(link, source)
+    if not description: description = title 
+
+    print(f"   🤖 Generating Proposal...")
+    ai_text = generate_smart_response(title, description)
+
+    # مقص الأمان للرسالة الثانية (لو العرض طويل جداً)
+    if len(ai_text) > 4000:
+        ai_text = ai_text[:4000] + "\n...(تم قص العرض لطوله الزائد)"
+
+    try:
+        r2 = requests.post(url, data={"chat_id": CHAT_ID, "text": ai_text})
+        if r2.status_code == 200:
+            print(f"   ✅ Proposal Sent Successfully!")
         else:
-            # هنا سيظهر لك السبب الحقيقي إذا لم تصل الرسالة
-            print(f"   ⚠️ Telegram Error: {response.status_code} - {response.text}")
+            print(f"   ⚠️ Proposal Msg Failed: {r2.text}")
             
     except Exception as e:
-        print(f"   ❌ Network Error: {e}")
+        print(f"   ❌ Network Error (Msg2): {e}")
 
 def check_project_filter(title):
     text = title.lower()
