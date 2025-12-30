@@ -1,12 +1,21 @@
-import google.generativeai as genai
 import os
+import google.genai as genai
 
-# ضع مفتاحك هنا مباشرة للتجربة
-API_KEY = "ضع_مفتاحك_هنا"
+# =========================
+# 🔑 إعداد مفتاح Gemini
+# =========================
+GEMINI_API_KEY = "AIzaSyD8_5oNQnZl7R62blz3xZ9BlUwGAqJsfAw"
 
-genai.configure(api_key=API_KEY)
+if not GEMINI_API_KEY:
+    print("❌ GEMINI_API_KEY not set in environment variables.")
+    exit()
 
-print("الموديلات المتاحة لمفتاحك:")
-for m in genai.list_models():
-    if 'generateContent' in m.supported_generation_methods:
-        print(f"- {m.name}")
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+print("\n📃 Available Models:\n")
+
+try:
+    for model in client.models.list():
+        print(" -", model.name)
+except Exception as e:
+    print("❌ Error listing models:", e)

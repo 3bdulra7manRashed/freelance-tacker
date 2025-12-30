@@ -5,7 +5,7 @@ import datetime
 import cloudscraper
 from bs4 import BeautifulSoup
 import requests
-from google import genai # استيراد المكتبة الجديدة
+from google import genai
 
 # ==========================================
 # ⚙️ إعدادات السيرفر
@@ -15,34 +15,15 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# إعداد عميل الذكاء الاصطناعي الجديد
+# إعداد العميل
 ai_client = None
+
 if GEMINI_API_KEY:
     try:
-        # إنشاء العميل بالطريقة الجديدة
         ai_client = genai.Client(api_key=GEMINI_API_KEY.strip())
-        print("✅ New Google GenAI Client Connected!")
+        print("✅ GenAI Client Connected successfully.")
     except Exception as e:
-        print(f"❌ AI Client Error: {e}")
-else:
-    print("⚠️ Warning: GEMINI_API_KEY not found.")
-
-URLS = {
-    "Mostaql": "https://mostaql.com/projects",
-    "Khamsat": "https://khamsat.com/community/requests"
-}
-
-POLL_INTERVAL = 60 
-processed_projects = set()
-
-# المتصفح
-scraper = cloudscraper.create_scraper(
-    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-)
-scraper.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
-})
+        print(f"❌ Client Error: {e}")
 
 # --- الكلمات المفتاحية ---
 EXCLUDED_KEYWORDS = [
@@ -76,6 +57,21 @@ QURAN_KEYWORDS = [
     "ديني", "دعوي", "إسلامي", "islamic"
 ]
 
+URLS = {
+    "Mostaql": "https://mostaql.com/projects",
+    "Khamsat": "https://khamsat.com/community/requests"
+}
+POLL_INTERVAL = 60
+processed_projects = set()
+
+scraper = cloudscraper.create_scraper(
+    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+)
+scraper.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
+})
+
 def get_full_project_details(link, source):
     try:
         response = scraper.get(link, timeout=15)
@@ -96,31 +92,47 @@ def get_full_project_details(link, source):
         return None
 
 def generate_smart_response(title, description):
-    """توليد العرض باستخدام المكتبة الجديدة"""
+    """
+    يستخدم الموديلات الموجودة في حسابك بالضبط لتجنب خطأ 404
+    """
     if not ai_client: return "⚠️ AI Service Unavailable"
     
+    # هذه القائمة مأخوذة من الصورة التي أرسلتها (دقيقة 100%)
+    models_to_try = [
+        "gemini-2.0-flash",       # الأفضل والأسرع حالياً
+        "gemini-2.5-flash",       # النسخة الأحدث
+        "gemini-2.0-flash-lite",  # نسخة خفيفة وسريعة جداً
+        "gemini-3-flash-preview"  # النسخة المستقبلية (لو حبيت تجربها)
+    ]
+
     prompt = f"""
     تصرف كمبرمج ومستقل خبير.
     المشروع: {title}
     الوصف: {description}
 
-    1. اكتب عرض عمل (Proposal) احترافي، قصير (3 أسطر)، مقنع، بدون ذكر سعر أو وقت. ابدأ بـ "أهلاً بك أستاذي".
-    2. في النهاية افصل بخط واكتب تقديرك للتكلفة (بالدولار) والمدة (بالأيام).
+    1. اكتب عرض عمل (Proposal) احترافي، قصير (3 أسطر)، مقنع جداً.
+    2. افصل بخط واكتب التقدير (سعر ووقت) بناءً على الخبرة.
     
     التنسيق:
     [نص العرض]
     ــــــــــــــــــــــــــ
     💡 *التقدير:* [السعر] | [المدة]
     """
-    try:
-        # الكود الجديد لاستدعاء الموديل
-        response = ai_client.models.generate_content(
-            model='gemini-3-flash', 
-            contents=prompt
-        )
-        return response.text
-    except Exception as e:
-        return f"AI Generation Error: {str(e)}"
+    
+    for model_name in models_to_try:
+        try:
+            # print(f"   🔄 Trying: {model_name}...") # (اختياري للتتبع)
+            response = ai_client.models.generate_content(
+                model=model_name, 
+                contents=prompt
+            )
+            print(f"   ✅ Success using: {model_name}")
+            return response.text
+        except Exception as e:
+            # لو فشل نجرب اللي بعده بصمت
+            continue
+
+    return "تعذر توليد الرد من جميع الموديلات المتاحة."
 
 def send_telegram_message(title, link, source, category):
     if not BOT_TOKEN or not CHAT_ID: return
@@ -207,10 +219,10 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Freelance Bot (New GenAI SDK) ---")
+    print("--- 🤖 Freelance Bot (Smart Edition V3) ---")
     
     if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
+        print("🛑 Missing Tokens!")
         return
 
     print("1. Initializing & caching existing projects...")
