@@ -5,39 +5,37 @@ import datetime
 import cloudscraper
 from bs4 import BeautifulSoup
 import requests
-import google.generativeai as genai
+from google import genai # استيراد المكتبة الجديدة
 
 # ==========================================
-# ⚙️ إعدادات السيرفر (Environment Variables)
+# ⚙️ إعدادات السيرفر
 # ==========================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# إعداد نموذج الذكاء الاصطناعي
+# إعداد عميل الذكاء الاصطناعي الجديد
+ai_client = None
 if GEMINI_API_KEY:
     try:
-        # استخدام strip() لحل مشكلة المسافات الزائدة
-        genai.configure(api_key=GEMINI_API_KEY.strip())
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        print("✅ AI Model Configured: gemini-1.5-flash")
+        # إنشاء العميل بالطريقة الجديدة
+        ai_client = genai.Client(api_key=GEMINI_API_KEY.strip())
+        print("✅ New Google GenAI Client Connected!")
     except Exception as e:
-        print(f"❌ Gemini Error: {e}")
-        model = None
+        print(f"❌ AI Client Error: {e}")
 else:
-    model = None
-    print("⚠️ Warning: GEMINI_API_KEY not found. AI features disabled.")
+    print("⚠️ Warning: GEMINI_API_KEY not found.")
 
 URLS = {
     "Mostaql": "https://mostaql.com/projects",
     "Khamsat": "https://khamsat.com/community/requests"
 }
 
-POLL_INTERVAL = 60 # الفحص كل دقيقة (متوازن للسيرفر)
+POLL_INTERVAL = 60 
 processed_projects = set()
 
-# إعداد المتصفح الوهمي
+# المتصفح
 scraper = cloudscraper.create_scraper(
     browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
 )
@@ -46,7 +44,7 @@ scraper.headers.update({
     'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
 })
 
-# --- الكلمات المفتاحية (Final Version) ---
+# --- الكلمات المفتاحية ---
 EXCLUDED_KEYWORDS = [
     "wordpress", "ووردبريس", "وردبريس", "ورد بريس", 
     "elementor", "divi", "woocommerce", "وكومرس", 
@@ -79,7 +77,6 @@ QURAN_KEYWORDS = [
 ]
 
 def get_full_project_details(link, source):
-    """جلب الوصف الكامل للمشروع"""
     try:
         response = scraper.get(link, timeout=15)
         if response.status_code != 200: return None
@@ -99,8 +96,8 @@ def get_full_project_details(link, source):
         return None
 
 def generate_smart_response(title, description):
-    """توليد العرض الذكي"""
-    if not model: return "⚠️ AI Service Unavailable"
+    """توليد العرض باستخدام المكتبة الجديدة"""
+    if not ai_client: return "⚠️ AI Service Unavailable"
     
     prompt = f"""
     تصرف كمبرمج ومستقل خبير.
@@ -116,15 +113,17 @@ def generate_smart_response(title, description):
     💡 *التقدير:* [السعر] | [المدة]
     """
     try:
-        response = model.generate_content(prompt)
+        # الكود الجديد لاستدعاء الموديل
+        response = ai_client.models.generate_content(
+            model='gemini-1.5-flash', 
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         return f"AI Generation Error: {str(e)}"
 
 def send_telegram_message(title, link, source, category):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 Error: Missing Telegram Tokens")
-        return
+    if not BOT_TOKEN or not CHAT_ID: return
 
     description = get_full_project_details(link, source)
     if not description: description = title 
@@ -208,13 +207,12 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Smart Freelance Bot Started (Server Mode) ---")
+    print("--- 🤖 Freelance Bot (New GenAI SDK) ---")
     
     if not BOT_TOKEN or not CHAT_ID:
         print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
         return
 
-    # الفحص الأولي للحفظ فقط
     print("1. Initializing & caching existing projects...")
     for src, url in URLS.items(): scrape_site(src, url, is_first_run=True)
     

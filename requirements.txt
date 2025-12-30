@@ -1,4 +1,4 @@
 cloudscraper
 beautifulsoup4
 requests
-google-generativeai
+google-genai
