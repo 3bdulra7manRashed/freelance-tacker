@@ -99,24 +99,32 @@ def generate_smart_response(title, description):
     
     # هذه القائمة مأخوذة من الصورة التي أرسلتها (دقيقة 100%)
     models_to_try = [
-        "gemini-2.0-flash",       # الأفضل والأسرع حالياً
-        "gemini-2.5-flash",       # النسخة الأحدث
-        "gemini-2.0-flash-lite",  # نسخة خفيفة وسريعة جداً
-        "gemini-3-flash-preview"  # النسخة المستقبلية (لو حبيت تجربها)
+        "gemini-2.5-pro",
+        "gemini-2.5-flash", 
+        "gemini-2.0-flash",       
+        "gemini-2.0-flash-lite",  
+        "gemini-3-flash-preview"
     ]
 
     prompt = f"""
-    تصرف كمبرمج ومستقل خبير.
-    المشروع: {title}
-    الوصف: {description}
-
-    1. اكتب عرض عمل (Proposal) احترافي، قصير (3 أسطر)، مقنع جداً.
-    2. افصل بخط واكتب التقدير (سعر ووقت) بناءً على الخبرة.
+    Act as an expert Senior Full Stack Developer and Freelancer.
     
-    التنسيق:
-    [نص العرض]
+    Project Details:
+    - Title: {title}
+    - Description: {description}
+
+    Instructions:
+    1. Read the project description carefully to understand the client's specific needs (do not rely on the title only).
+    2. Write a professional, detailed, and convincing proposal in Arabic. 
+       - Do not make it short or generic. 
+       - Explain how you will solve their specific problem based on the description.
+       - Show enthusiasm and expertise.
+    3. At the very end, provide a realistic estimation for the Cost (in USD) and Duration (in Days) based on the scope of work described.
+
+    Required Output Format:
+    [The Proposal Text in Arabic]
     ــــــــــــــــــــــــــ
-    💡 *التقدير:* [السعر] | [المدة]
+    💡 *التقدير:* [Price] | [Duration]
     """
     
     for model_name in models_to_try:
