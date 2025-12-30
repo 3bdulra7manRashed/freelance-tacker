@@ -115,7 +115,7 @@ def generate_smart_response(title, description):
     try:
         # الكود الجديد لاستدعاء الموديل
         response = ai_client.models.generate_content(
-            model='gemini-1.5-flash', 
+            model='gemini-3-flash', 
             contents=prompt
         )
         return response.text
