@@ -143,29 +143,43 @@ def generate_smart_response(title, description):
     return "تعذر توليد الرد من جميع الموديلات المتاحة."
 
 def send_telegram_message(title, link, source, category):
-    if not BOT_TOKEN or not CHAT_ID: return
+    if not BOT_TOKEN or not CHAT_ID: 
+        print("🛑 Error: Missing Telegram Tokens")
+        return
 
     description = get_full_project_details(link, source)
     if not description: description = title 
 
     ai_text = generate_smart_response(title, description)
 
-    msg = f"""🔔 **مشروع {category} جديد ({source})**
+    # 1. إزالة التنسيق مؤقتاً لضمان وصول الرسالة (سناقوم بإرجاعه لاحقاً بطريقة آمنة)
+    # لاحظ أنني حذفت "parse_mode": "Markdown" من الأسفل
+    msg = f"""🔔 مشروع {category} جديد ({source})
 
-📝 **{title}**
+📝 {title}
 
 🔗 {link}
 
 ــــــــــــــــــــــــــــــــــــــــــــــــــــ
 {ai_text}
 """
+    
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
+    # قمنا بإزالة parse_mode مؤقتاً
+    payload = {"chat_id": CHAT_ID, "text": msg} 
+    
     try:
-        requests.post(url, data=payload)
-        print(f"   ✅ Notification Sent: {title}")
+        response = requests.post(url, data=payload)
+        
+        # 2. التحقق الدقيق من رد تليجرام
+        if response.status_code == 200:
+            print(f"   ✅ Notification Sent Successfully: {title}")
+        else:
+            # هنا سيظهر لك السبب الحقيقي إذا لم تصل الرسالة
+            print(f"   ⚠️ Telegram Error: {response.status_code} - {response.text}")
+            
     except Exception as e:
-        print(f"   ❌ Telegram Error: {e}")
+        print(f"   ❌ Network Error: {e}")
 
 def check_project_filter(title):
     text = title.lower()
