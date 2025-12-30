@@ -15,7 +15,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# إعداد العميل
+# إعداد العميل (SDK الجديد)
 ai_client = None
 
 if GEMINI_API_KEY:
@@ -73,6 +73,7 @@ scraper.headers.update({
 })
 
 def get_full_project_details(link, source):
+    """جلب وصف المشروع للتوليد الدقيق"""
     try:
         response = scraper.get(link, timeout=15)
         if response.status_code != 200: return None
@@ -91,51 +92,55 @@ def get_full_project_details(link, source):
         print(f"   ❌ Detail Fetch Error: {e}")
         return None
 
-def generate_smart_response(title, description):
+def generate_smart_response(title, description, source):
     """
-    يستخدم الموديلات الموجودة في حسابك بالضبط لتجنب خطأ 404
+    توليد العرض مع توجيه محدد للمنصة (مستقل أو خمسات)
     """
     if not ai_client: return "⚠️ AI Service Unavailable"
     
-    # هذه القائمة مأخوذة من الصورة التي أرسلتها (دقيقة 100%)
+    # 1. تحديد اسم المنصة بالعربي
+    platform_arabic = "مستقل" if source == "Mostaql" else "خمسات"
+    
+    # 2. تجهيز جملة التوجيه
+    target_instruction = f"قدم على هذا المشروع في {platform_arabic}"
+
+    # موديلاتك المتاحة (مرتبة حسب الأفضلية)
     models_to_try = [
-        "gemini-2.5-pro",
-        "gemini-2.5-flash", 
         "gemini-2.0-flash",       
-        "gemini-2.0-flash-lite",  
-        "gemini-3-flash-preview"
+        "gemini-2.5-flash",       
+        "gemini-2.0-flash-lite", 
+        "gemini-3-flash-preview"  
     ]
 
+    # البرومبت الإنجليزي (الديناميكي)
     prompt = f"""
-You are an expert **Senior Full Stack Developer & Professional Freelancer**.
+    Act as an expert Senior Full Stack Developer and Freelancer.
+    
+    Project Details:
+    - Title: {title}
+    - Description: {description}
+    
+    # YOUR TASK:
+    {target_instruction}
+    (Write a professional proposal to apply for this project on {platform_arabic}).
 
-Project Information:
-- Title: {title}
-- Description: {description}
+    Instructions:
+    1. Read the description carefully.
+    2. Write the proposal in Arabic.
+       - It must be tailored for "{platform_arabic}".
+       - Show expertise and specific solutions based on the description.
+       - Max length: 2000 characters.
+    3. End with a realistic Cost (USD) and Duration (Days) estimation.
 
-Your Task:
-1. Read and analyze the project description carefully. Focus on the actual needs, not just the title.
-2. Write a **professional, convincing proposal in Arabic only**.
-3. The proposal must:
-   - Show confidence, experience, and understanding of the client's needs.
-   - Explain briefly how you will execute the project step-by-step.
-   - Suggest suitable technologies (Laravel / Next.js / APIs / MySQL ... depending on context).
-   - Must NOT contain price or duration inside the main proposal text.
-4. After the proposal, provide a **realistic estimation (in USD and Days)** in a separate line.
-
-Output Format (VERY IMPORTANT):
-Write the proposal text only in **Arabic**.
-
-Then add at the end exactly in this format:
-
-ــــــــــــــــــــــــــــــــــــــــــــــ
-💡 *التقدير:* [Price in USD] | [Duration in Days]
-"""
-
+    Output Format:
+    [Proposal Text]
+    ــــــــــــــــــــــــــ
+    💡 *التقدير:* [Price] | [Duration]
+    """
     
     for model_name in models_to_try:
         try:
-            # print(f"   🔄 Trying: {model_name}...") # (اختياري للتتبع)
+            # print(f"Trying {model_name}...") # Debug
             response = ai_client.models.generate_content(
                 model=model_name, 
                 contents=prompt
@@ -143,10 +148,9 @@ Then add at the end exactly in this format:
             print(f"   ✅ Success using: {model_name}")
             return response.text
         except Exception as e:
-            # لو فشل نجرب اللي بعده بصمت
             continue
 
-    return "تعذر توليد الرد من جميع الموديلات المتاحة."
+    return "تعذر توليد الرد من جميع الموديلات."
 
 def send_telegram_message(title, link, source, category):
     if not BOT_TOKEN or not CHAT_ID: return
@@ -164,8 +168,8 @@ def send_telegram_message(title, link, source, category):
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     
-    # نرسل الرسالة الأولى (بدون Markdown لتجنب الأخطاء في العناوين الغريبة)
     try:
+        # نرسل الرابط أولاً
         r1 = requests.post(url, data={"chat_id": CHAT_ID, "text": msg1})
         if r1.status_code != 200:
             print(f"   ⚠️ Project Msg Failed: {r1.text}")
@@ -176,16 +180,17 @@ def send_telegram_message(title, link, source, category):
     # 2️⃣ الرسالة الثانية: العرض الذكي (تصل بعد ثوانٍ)
     # -------------------------------------------------------
     
-    # نجلب الوصف الآن عشان الذكاء الاصطناعي
     description = get_full_project_details(link, source)
     if not description: description = title 
 
-    print(f"   🤖 Generating Proposal...")
-    ai_text = generate_smart_response(title, description)
+    print(f"   🤖 Generating Proposal for {source}...")
+    
+    # نمرر source هنا ليختار البرومبت المناسب
+    ai_text = generate_smart_response(title, description, source)
 
-    # مقص الأمان للرسالة الثانية (لو العرض طويل جداً)
+    # مقص الأمان (لو الكلام زاد عن حد تليجرام)
     if len(ai_text) > 4000:
-        ai_text = ai_text[:4000] + "\n...(تم قص العرض لطوله الزائد)"
+        ai_text = ai_text[:4000] + "\n...(تم القص)"
 
     try:
         r2 = requests.post(url, data={"chat_id": CHAT_ID, "text": ai_text})
@@ -257,10 +262,10 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Freelance Bot (Smart Edition V3) ---")
+    print("--- 🤖 Freelance Bot (Final Server Edition) ---")
     
     if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 Missing Tokens!")
+        print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
         return
 
     print("1. Initializing & caching existing projects...")
