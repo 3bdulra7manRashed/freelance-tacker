@@ -15,7 +15,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# إعداد العميل (SDK الجديد)
+# إعداد العميل
 ai_client = None
 
 if GEMINI_API_KEY:
@@ -73,7 +73,6 @@ scraper.headers.update({
 })
 
 def get_full_project_details(link, source):
-    """جلب وصف المشروع للتوليد الدقيق"""
     try:
         response = scraper.get(link, timeout=15)
         if response.status_code != 200: return None
@@ -94,53 +93,48 @@ def get_full_project_details(link, source):
 
 def generate_smart_response(title, description, source):
     """
-    توليد العرض مع توجيه محدد للمنصة (مستقل أو خمسات)
+    توليد العرض باستخدام البرومبت العربي الاحترافي الجديد
     """
     if not ai_client: return "⚠️ AI Service Unavailable"
     
-    # 1. تحديد اسم المنصة بالعربي
     platform_arabic = "مستقل" if source == "Mostaql" else "خمسات"
     
-    # 2. تجهيز جملة التوجيه
-    target_instruction = f"قدم على هذا المشروع في {platform_arabic}"
-
-    # موديلاتك المتاحة (مرتبة حسب الأفضلية)
     models_to_try = [
-        "gemini-2.0-flash",       
-        "gemini-2.5-flash",       
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",               
         "gemini-2.0-flash-lite", 
         "gemini-3-flash-preview"  
     ]
 
-    # البرومبت الإنجليزي (الديناميكي)
+    # 👇 هنا وضعنا البرومبت الجديد الخاص بك
     prompt = f"""
-    Act as an expert Senior Full Stack Developer and Freelancer.
+    أنت خبير في كتابة عروض المشاريع (Proposals) على منصات العمل الحر.
     
-    Project Details:
-    - Title: {title}
-    - Description: {description}
+    المهمة:
+    أريدك أن تكتب لي عرضاً احترافياً للتقديم على مشروع بعنوان: "{title}"
+    عبر منصة: {platform_arabic}
     
-    # YOUR TASK:
-    {target_instruction}
-    (Write a professional proposal to apply for this project on {platform_arabic}).
+    تفاصيل المشروع (الوصف):
+    {description}
 
-    Instructions:
-    1. Read the description carefully.
-    2. Write the proposal in Arabic.
-       - It must be tailored for "{platform_arabic}".
-       - Show expertise and specific solutions based on the description.
-       - Max length: 2000 characters.
-    3. End with a realistic Cost (USD) and Duration (Days) estimation.
+    الشروط الصارمة في الرد:
+    1. اللغة: لغة عربية فصحى، مهنية، وبسيطة (تجنب تماماً التكلف والمصطلحات المستهلكة مثل 'يشرفني العمل معك' و'يسعدني جداً' و'قرأت طلبك بعناية').
+    2. الأسلوب: ابدأ مباشرة بتحليل احتياج العميل وحل مشكلته. ركز على القيمة المضافة (Value Proposition) وليس فقط سرد المهارات التقنية.
+    3. الهيكلية: استخدم نقاطاً مركزة (Bullet Points) بدلاً من الفقرات الطويلة المملة.
+    4. الذكاء الوظيفي: أظهر فهمك العميق عبر الحديث عن أهمية تجربة المستخدم (UX)، الأداء، وسهولة الإدارة في لوحة التحكم (Dashboard) إذا كان المشروع يتطلب ذلك.
+    5. الخاتمة: اختم بسؤال تقني ذكي واحد فقط يدفع العميل لمراسلتي للإجابة عليه (Call to Action).
+    6. الطول: لا تتجاوز 2000 حرف (لأن تليجرام له حد أقصى).
+    7. التخصيص: اجعل الرد يبدو كأنه مكتوب من خبير بشري لديه استراتيجية، وليس مجرد بوت ينسخ ويلصق.
 
-    Output Format:
-    [Proposal Text]
+    التنسيق النهائي للمخرجات:
+    [نص العرض الاحترافي هنا]
     ــــــــــــــــــــــــــ
-    💡 *التقدير:* [Price] | [Duration]
+    💡 *التقدير:* [السعر المتوقع بالدولار] | [المدة المتوقعة بالأيام]
     """
     
     for model_name in models_to_try:
         try:
-            # print(f"Trying {model_name}...") # Debug
             response = ai_client.models.generate_content(
                 model=model_name, 
                 contents=prompt
@@ -150,16 +144,13 @@ def generate_smart_response(title, description, source):
         except Exception as e:
             continue
 
-    return "تعذر توليد الرد من جميع الموديلات."
+    return "تعذر توليد الرد."
 
 def send_telegram_message(title, link, source, category):
     if not BOT_TOKEN or not CHAT_ID: return
 
-    # -------------------------------------------------------
-    # 1️⃣ الرسالة الأولى: تفاصيل المشروع (تصل فوراً)
-    # -------------------------------------------------------
+    # 1️⃣ رسالة الإشعار
     print(f"   🚀 Sending Project Notification: {title}")
-    
     msg1 = f"""🔔 مشروع {category} جديد ({source})
 
 📝 {title}
@@ -167,28 +158,18 @@ def send_telegram_message(title, link, source, category):
 🔗 {link}"""
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    
     try:
-        # نرسل الرابط أولاً
-        r1 = requests.post(url, data={"chat_id": CHAT_ID, "text": msg1})
-        if r1.status_code != 200:
-            print(f"   ⚠️ Project Msg Failed: {r1.text}")
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg1})
     except Exception as e:
         print(f"   ❌ Network Error (Msg1): {e}")
 
-    # -------------------------------------------------------
-    # 2️⃣ الرسالة الثانية: العرض الذكي (تصل بعد ثوانٍ)
-    # -------------------------------------------------------
-    
+    # 2️⃣ رسالة العرض (البروبوزال)
     description = get_full_project_details(link, source)
     if not description: description = title 
 
     print(f"   🤖 Generating Proposal for {source}...")
-    
-    # نمرر source هنا ليختار البرومبت المناسب
     ai_text = generate_smart_response(title, description, source)
 
-    # مقص الأمان (لو الكلام زاد عن حد تليجرام)
     if len(ai_text) > 4000:
         ai_text = ai_text[:4000] + "\n...(تم القص)"
 
@@ -198,7 +179,6 @@ def send_telegram_message(title, link, source, category):
             print(f"   ✅ Proposal Sent Successfully!")
         else:
             print(f"   ⚠️ Proposal Msg Failed: {r2.text}")
-            
     except Exception as e:
         print(f"   ❌ Network Error (Msg2): {e}")
 
@@ -262,10 +242,10 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Freelance Bot (Final Server Edition) ---")
+    print("--- 🤖 Freelance Bot (Professional Prompt V5) ---")
     
     if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
+        print("🛑 Missing Tokens!")
         return
 
     print("1. Initializing & caching existing projects...")
