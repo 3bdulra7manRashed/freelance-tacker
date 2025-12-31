@@ -5,7 +5,6 @@ import datetime
 import cloudscraper
 from bs4 import BeautifulSoup
 import requests
-from google import genai
 
 # ==========================================
 # ⚙️ إعدادات السيرفر
@@ -13,17 +12,6 @@ from google import genai
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# إعداد العميل
-ai_client = None
-
-if GEMINI_API_KEY:
-    try:
-        ai_client = genai.Client(api_key=GEMINI_API_KEY.strip())
-        print("✅ GenAI Client Connected successfully.")
-    except Exception as e:
-        print(f"❌ Client Error: {e}")
 
 # --- الكلمات المفتاحية ---
 EXCLUDED_KEYWORDS = [
@@ -73,9 +61,10 @@ scraper.headers.update({
 })
 
 def get_full_project_details(link, source):
+    """جلب وصف المشروع الأصلي"""
     try:
         response = scraper.get(link, timeout=15)
-        if response.status_code != 200: return None
+        if response.status_code != 200: return "تعذر جلب الوصف."
         soup = BeautifulSoup(response.content, 'html.parser')
         
         description = ""
@@ -86,91 +75,50 @@ def get_full_project_details(link, source):
             desc_elem = soup.select_one('.article-body') or soup.select_one('.post_content')
             if desc_elem: description = desc_elem.text.strip()
             
-        return description[:2500] 
+        return description if description else "لا يوجد وصف."
     except Exception as e:
         print(f"   ❌ Detail Fetch Error: {e}")
-        return None
-
-def generate_smart_response(title, description, source):
-    """
-    توليد العرض باستخدام البرومبت العربي الاحترافي الجديد
-    """
-    if not ai_client: return "⚠️ AI Service Unavailable"
-    
-    platform_arabic = "مستقل" if source == "Mostaql" else "خمسات"
-    
-    models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",               
-        "gemini-2.0-flash-lite", 
-        "gemini-3-flash-preview"  
-    ]
-
-    # 👇 هنا وضعنا البرومبت الجديد الخاص بك
-    prompt = f"""
-    أنت خبير في كتابة عروض المشاريع (Proposals) على منصات العمل الحر.
-    
-    المهمة:
-    أريدك أن تكتب لي عرضاً احترافياً للتقديم على مشروع بعنوان: "{title}"
-    عبر منصة: {platform_arabic}
-    
-    تفاصيل المشروع (الوصف):
-    {description}
-
-    التنسيق النهائي للمخرجات:
-    [نص العرض الاحترافي هنا]
-    ــــــــــــــــــــــــــ
-    💡 *التقدير:* [السعر المتوقع بالدولار] | [المدة المتوقعة بالأيام]
-    """
-    
-    for model_name in models_to_try:
-        try:
-            response = ai_client.models.generate_content(
-                model=model_name, 
-                contents=prompt
-            )
-            print(f"   ✅ Success using: {model_name}")
-            return response.text
-        except Exception as e:
-            continue
-
-    return "تعذر توليد الرد."
+        return "خطأ في جلب الوصف."
 
 def send_telegram_message(title, link, source, category):
     if not BOT_TOKEN or not CHAT_ID: return
 
-    # 1️⃣ رسالة الإشعار
-    print(f"   🚀 Sending Project Notification: {title}")
-    msg1 = f"""🔔 مشروع {category} جديد ({source})
+    print(f"   🚀 Preparing Notification: {title}")
+
+    # 1. جلب الوصف
+    description = get_full_project_details(link, source)
+    
+    # 2. بناء الرسالة الموحدة
+    # ملاحظة: لم نستخدم Markdown لتجنب الأخطاء إذا احتوى الوصف على رموز خاصة
+    msg = f"""🔔 مشروع {category} جديد ({source})
 
 📝 {title}
 
-🔗 {link}"""
+🔗 {link}
 
+ــــــــــــــــــــــــــــــــــــــــــــــــــــ
+📄 تفاصيل المشروع:
+{description}
+"""
+
+    # 3. مقص الأمان (تليجرام يقبل 4096 حرف كحد أقصى)
+    # نقص عند 4000 لترك مساحة للرأس وتجنب الرفض
+    if len(msg) > 4000:
+        msg = msg[:4000] + "\n\n...(تم قص باقي الرسالة لطولها الزائد)"
+
+    # 4. الإرسال
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg1})
-    except Exception as e:
-        print(f"   ❌ Network Error (Msg1): {e}")
-
-    # 2️⃣ رسالة العرض (البروبوزال)
-    description = get_full_project_details(link, source)
-    if not description: description = title 
-
-    print(f"   🤖 Generating Proposal for {source}...")
-    ai_text = generate_smart_response(title, description, source)
-
-    if len(ai_text) > 4000:
-        ai_text = ai_text[:4000] + "\n...(تم القص)"
+    payload = {"chat_id": CHAT_ID, "text": msg} # إرسال كنص عادي مضمون الوصول
 
     try:
-        r2 = requests.post(url, data={"chat_id": CHAT_ID, "text": ai_text})
-        if r2.status_code == 200:
-            print(f"   ✅ Proposal Sent Successfully!")
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            print(f"   ✅ Notification Sent Successfully!")
         else:
-            print(f"   ⚠️ Proposal Msg Failed: {r2.text}")
+            print(f"   ⚠️ Telegram Error: {response.text}")
+            
     except Exception as e:
-        print(f"   ❌ Network Error (Msg2): {e}")
+        print(f"   ❌ Network Error: {e}")
 
 def check_project_filter(title):
     text = title.lower()
@@ -232,10 +180,10 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Freelance Bot (Professional Prompt V5) ---")
+    print("--- 🤖 Freelance Bot (Unified Message Mode) ---")
     
     if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 Missing Tokens!")
+        print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
         return
 
     print("1. Initializing & caching existing projects...")
