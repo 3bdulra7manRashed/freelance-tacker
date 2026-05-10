@@ -12,6 +12,7 @@ import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 # --- الكلمات المفتاحية ---
 EXCLUDED_KEYWORDS = [
@@ -80,16 +81,10 @@ def get_full_project_details(link, source):
         print(f"   ❌ Detail Fetch Error: {e}")
         return "خطأ في جلب الوصف."
 
-def send_telegram_message(title, link, source, category):
+def send_telegram_message(title, link, source, category, description):
+    """إرسال الإشعار إلى تليجرام"""
     if not BOT_TOKEN or not CHAT_ID: return
 
-    print(f"   🚀 Preparing Notification: {title}")
-
-    # 1. جلب الوصف
-    description = get_full_project_details(link, source)
-    
-    # 2. بناء الرسالة الموحدة
-    # ملاحظة: لم نستخدم Markdown لتجنب الأخطاء إذا احتوى الوصف على رموز خاصة
     msg = f"""🔔 مشروع {category} جديد ({source})
 
 📝 {title}
@@ -101,24 +96,47 @@ def send_telegram_message(title, link, source, category):
 {description}
 """
 
-    # 3. مقص الأمان (تليجرام يقبل 4096 حرف كحد أقصى)
-    # نقص عند 4000 لترك مساحة للرأس وتجنب الرفض
     if len(msg) > 4000:
         msg = msg[:4000] + "\n\n...(تم قص باقي الرسالة لطولها الزائد)"
 
-    # 4. الإرسال
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": msg} # إرسال كنص عادي مضمون الوصول
+    payload = {"chat_id": CHAT_ID, "text": msg}
 
     try:
         response = requests.post(url, data=payload)
         if response.status_code == 200:
-            print(f"   ✅ Notification Sent Successfully!")
+            print(f"   ✅ Telegram Notification Sent!")
         else:
             print(f"   ⚠️ Telegram Error: {response.text}")
-            
     except Exception as e:
-        print(f"   ❌ Network Error: {e}")
+        print(f"   ❌ Telegram Network Error: {e}")
+
+def send_discord_message(title, link, source, category, description):
+    """إرسال الإشعار إلى ديسكورد"""
+    if not DISCORD_WEBHOOK_URL: return
+
+    desc_discord = description
+    if len(desc_discord) > 3500:
+        desc_discord = desc_discord[:3500] + "\n\n...(تم قص باقي التفاصيل لطولها الزائد)"
+
+    embed = {
+        "title": f"🔔 مشروع {category} جديد ({source})",
+        "description": f"**[{title}]({link})**\n\n**📄 تفاصيل المشروع:**\n{desc_discord}",
+        "color": 3447003 if source == "Mostaql" else 15105570,
+        "url": link,
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }
+
+    payload = {"embeds": [embed]}
+
+    try:
+        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        if response.status_code in [200, 204]:
+            print(f"   ✅ Discord Notification Sent!")
+        else:
+            print(f"   ⚠️ Discord Error ({response.status_code}): {response.text}")
+    except Exception as e:
+        print(f"   ❌ Discord Network Error: {e}")
 
 def check_project_filter(title):
     text = title.lower()
@@ -172,7 +190,13 @@ def scrape_site(source_name, url, is_first_run=False):
             cat = check_project_filter(title)
             if cat:
                 print(f"   🔥 Match: {title}")
-                send_telegram_message(title, link, source_name, cat)
+                
+                # جلب الوصف مرة واحدة فقط لتوفير الموارد
+                description = get_full_project_details(link, source_name)
+                
+                # الإرسال للمنصات
+                send_telegram_message(title, link, source_name, cat, description)
+                send_discord_message(title, link, source_name, cat, description)
             
             processed_projects.add(link)
             
@@ -180,11 +204,16 @@ def scrape_site(source_name, url, is_first_run=False):
         print(f"\n❌ Scraping Error: {e}")
 
 def main():
-    print("--- 🤖 Freelance Bot (Unified Message Mode) ---")
+    print("--- 🤖 Freelance Bot (Multi-Platform Mode) ---")
     
-    if not BOT_TOKEN or not CHAT_ID:
-        print("🛑 CRITICAL: BOT_TOKEN or CHAT_ID variables are missing!")
+    # التحقق من وجود إعدادات واحدة على الأقل لتعمل
+    if not ((BOT_TOKEN and CHAT_ID) or DISCORD_WEBHOOK_URL):
+        print("🛑 CRITICAL: Missing Environment Variables!")
+        print("Please set (BOT_TOKEN and CHAT_ID) for Telegram AND/OR (DISCORD_WEBHOOK_URL) for Discord.")
         return
+
+    if BOT_TOKEN and CHAT_ID: print("🟢 Telegram: Configured")
+    if DISCORD_WEBHOOK_URL: print("🟢 Discord: Configured")
 
     print("1. Initializing & caching existing projects...")
     for src, url in URLS.items(): scrape_site(src, url, is_first_run=True)
